@@ -1,0 +1,4 @@
+- hosts: builder
+  force_handlers: true
+  roles:
+  - build
