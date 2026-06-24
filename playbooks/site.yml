@@ -1,1 +1,47 @@
+---
+- name: Triển khai ứng dụng web trên production   # Đây là một Play
+  hosts: app_servers
+  become: true
+  vars:
+    app_version: "2.3.1"
+    deploy_path: "/var/www/myapp"
 
+  pre_tasks:                      # Các bước chuẩn bị trước khi chạy role/tasks chính
+    - name: Đảm bảo hệ thống đã update
+      apt:
+        update_cache: yes
+
+  roles:                          # Role gom nhóm logic tái sử dụng
+    - common                      # Role cài đặt gói cơ bản, user, firewall
+    - database                    # Role cấu hình DB
+    - webserver                   # Role cấu hình Nginx/Apache
+
+  tasks:                          # Tasks bổ sung riêng cho Play này
+    - name: Tạo thư mục deploy
+      file:
+        path: "{{ deploy_path }}"
+        state: directory
+        owner: www-data
+        group: www-data
+
+    - block:                      # Gom nhóm tasks liên quan đến deploy app
+        - name: Copy mã nguồn ứng dụng
+          copy:
+            src: ./releases/{{ app_version }}/
+            dest: "{{ deploy_path }}/"
+            owner: www-data
+            group: www-data
+
+        - name: Restart dịch vụ web
+          service:
+            name: nginx
+            state: restarted
+      rescue:                     # Nếu có lỗi trong block
+        - name: Rollback về phiên bản trước
+          copy:
+            src: ./releases/{{ app_version | int - 1 }}/
+            dest: "{{ deploy_path }}/"
+      always:                     # Luôn chạy dù thành công hay thất bại
+        - name: Ghi log triển khai
+          debug:
+            msg: "Triển khai phiên bản {{ app_version }} đã kết thúc"
